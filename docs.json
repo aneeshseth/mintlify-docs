@@ -15,30 +15,37 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": ["intro"]
+            "pages": ["introduction"]
           },
           {
             "group": "The KV Setup",
             "pages": ["kv/resp"]
           },
           {
-            "group": "The Kubernetes Setup",
-            "pages": ["kubernetes/constructs"]
+            "group": "The K8S Setup",
+            "pages": ["k8s/resp"]
           }
         ]
       }
     ],
-    "global": {}
+    "global": {
+      "anchors": []
+    }
   },
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
   "navbar": {
-    "links": [],
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:hi@mintlify.com"
+      }
+    ],
     "primary": {
       "type": "button",
-      "label": "Try",
+      "label": "Dashboard",
       "href": "https://breadkv.aneesh.wiki"
     }
   },
