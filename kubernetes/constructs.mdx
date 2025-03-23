@@ -1,0 +1,137 @@
+---
+title: "The Kubernetes Constructs"
+icon: "gear"
+---
+
+This document explains the Kubernetes-based architecture implemented for a Redis-like project. Each user gets their own isolated Redis instance, represented by a dedicated pod within a managed Kubernetes cluster. The project uses DigitalOcean Kubernetes (DOKS) to manage the cluster.
+
+## Architecture Overview
+
+- **Instance Management:** Each user request triggers the creation of a new Redis pod, along with corresponding Kubernetes Service and Ingress resources.
+- **Routing:** Path-based routing is used with an Ingress Controller to direct requests to the appropriate Redis instance.
+- **TLS/SSL Management:** Certificates are managed using Let's Encrypt via cert-manager to ensure secure communication.
+
+### Components Involved
+
+1. **Pods** - Each Redis instance is deployed as a separate pod.
+2. **Services** - A ClusterIP service is created to provide stable internal access to the pod.
+3. **Ingress** - An Ingress resource routes external traffic to the correct Redis instance using domain-based routing.
+4. **Ingress Controller** - Handles incoming requests and forwards them to the appropriate service.
+5. **TLS Certificates** - Managed using cert-manager for HTTPS support.
+
+---
+
+## Example Configurations
+
+### Deployment Configuration
+
+The following example deploys a single Redis instance:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service_name
+  labels:
+    app: service_name
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service_name
+  template:
+    metadata:
+      labels:
+        app: service_name
+    spec:
+      volumes:
+        - name: workspace-volume
+          emptyDir: {}
+      containers:
+        - name: runner
+          image: aneeshseth/breadkv-runner-node
+          ports:
+            - containerPort: 3005
+          volumeMounts:
+            - name: workspace-volume
+              mountPath: /workspace
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+```
+
+### Service Configuration
+
+A ClusterIP service is used to expose the Redis instance within the cluster:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: service_name
+spec:
+  selector:
+    app: service_name
+  ports:
+    - protocol: TCP
+      name: redis
+      port: 3005
+      targetPort: 3005
+```
+
+### Ingress Configuration
+
+An Ingress resource is used to handle external requests and route them to the appropriate service based on the domain name.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: service_name
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - service_name.bowbox.click
+        - "*.bowbox.click"
+      secretName: cert-stage-wildcard
+  rules:
+    - host: service_name.bowbox.click
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: service_name
+                port:
+                  number: 3005
+```
+
+### TLS Certificate Configuration
+
+Let's Encrypt is used to issue a wildcard certificate for all subdomains of `bowbox.click` using cert-manager.
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-stage
+  namespace: ingress-nginx
+spec:
+  secretName: cert-stage-wildcard
+  issuerRef:
+    name: le-wildcard-issuer
+    kind: Issuer
+  commonName: "*.bowbox.click"
+  dnsNames:
+    - "*.bowbox.click"
+```
+
+This setup ensures isolation, and secure communication for each user's Redis instance.

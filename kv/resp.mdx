@@ -1,0 +1,181 @@
+---
+title: "Redis Serialization Protocol"
+description: "The Intuition behind the Redis Serialization Protocol"
+icon: "code"
+---
+
+## Introduction
+
+This document explains the implementation of a Redis-like server using the RESP (REdis Serialization Protocol) format. It details how RESP works, why it's used, and how the project reads and processes RESP data using Go.
+
+---
+
+## What is RESP?
+
+RESP (REdis Serialization Protocol) is a simple text-based protocol used for communication between Redis clients and servers. It's designed for easy parsing and supports different data types like bulk strings, arrays, and simple strings.
+
+### Features of RESP:
+
+- **Human-Readable:** Commands are text-based and simple to debug.
+- **Efficient:** Low overhead in parsing and serialization.
+- **Versatile:** Supports different data types like arrays, integers, and error messages.
+
+---
+
+## How RESP Works
+
+RESP uses a prefix to indicate the data type of each message. Here's a summary of RESP data types:
+
+| Prefix | Data Type     | Description                    |
+| ------ | ------------- | ------------------------------ |
+| `+`    | Simple String | OK, PONG                       |
+| `-`    | Error         | Error message                  |
+| `:`    | Integer       | Numeric value                  |
+| `$`    | Bulk String   | Arbitrary binary-safe string   |
+| `*`    | Array         | Collection of other RESP types |
+
+### Example RESP Messages:
+
+- **Simple String:** `+OK
+`
+- **Error:** `-Error message
+`
+- **Integer:** `:1000
+`
+- **Bulk String:** `$5
+hello
+`
+- **Array:** `*2
+$4
+ECHO
+$3
+hey
+`
+
+---
+
+## Understanding the Code
+
+The implementation uses a `Reader` struct to parse RESP messages. Let's break down the core functions.
+
+### 1. **Read Function**
+
+```go
+func (r *Reader) Read() (*ExecModel, error) {
+	operationType, err := r.reader.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	switch operationType {
+	case '$':
+		return r.ReadBulk()
+	case '*':
+		return r.ReadArray()
+	default:
+		return nil, fmt.Errorf("unsupported type: %s", string(operationType))
+	}
+}
+```
+
+- Reads the first byte to determine the data type.
+- Calls the corresponding `ReadBulk()` or `ReadArray()` function based on the type.
+- Returns an error if the type is unsupported.
+
+### 2. **Read Bulk Strings**
+
+```go
+func (r *Reader) ReadBulk() (*ExecModel, error) {
+	len, err := r.ReadInteger()
+	if err != nil {
+		return nil, err
+	}
+	bulk := make([]byte, len)
+	r.reader.Read(bulk)
+	r.ReadLine() // Remove \r\n
+	return &ExecModel{
+		_type: Bulk,
+		value: &values{
+			bulkStr: string(bulk),
+		},
+	}, nil
+}
+```
+
+- Reads the string length using `ReadInteger()`.
+- Extracts the string using `r.reader.Read()`.
+- Removes the trailing `\r\n` using `ReadLine()`.
+
+### Example Input and Output:
+
+```
+Input: $5\r\nhello\r\n
+Output: ExecModel { type: Bulk, value: "hello" }
+```
+
+### 3. **Read Arrays**
+
+```go
+func (r *Reader) ReadArray() (*ExecModel, error) {
+	len, err := r.ReadInteger()
+	if err != nil {
+		return nil, err
+	}
+	exec := make([]*ExecModel, len)
+	for i := 0; i < int(len); i++ {
+		execNested, err := r.Read()
+		if err != nil {
+			return nil, err
+		}
+		exec[i] = execNested
+	}
+
+	return &ExecModel{
+		_type: Array,
+		value: &values{
+			arrValue: exec,
+		},
+	}, nil
+}
+```
+
+- Reads the array length using `ReadInteger()`.
+- Iteratively reads each element using `Read()`.
+- Constructs an array of `ExecModel` structs.
+
+### Example Input and Output:
+
+```
+Input: *2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n
+Output: ExecModel { type: Array, value: [{type: Bulk, value: "ECHO"}, {type: Bulk, value: "hey"}] }
+```
+
+---
+
+## Command Processing
+
+The following commands are implemented in the server:
+
+1. **PING** - Returns `PONG`
+2. **GET** - Retrieves a value by key
+3. **SET** - Sets a key to a value
+
+### Example Commands
+
+```bash
+*1\r\n$4\r\nPING\r\n
+Output: PONG
+
+*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n
+Output: OK
+
+*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n
+Output: value
+```
+
+---
+
+## Conclusion
+
+This project demonstrates how to implement a Redis-like server using RESP parsing. The implementation covers data reading, parsing, and executing commands. With further enhancements, you could add more commands, or integrate persistent storage.
+
+For questions or further details, feel free to reach out!
