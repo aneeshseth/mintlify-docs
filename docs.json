@@ -15,7 +15,7 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": ["Introduction & Inspiration"]
+            "pages": ["intro"]
           },
           {
             "group": "The KV Setup",
